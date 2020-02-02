@@ -224,4 +224,139 @@
 				* acceleration for queries
 				* lack of detail data
 
+## Chapter 4: Encoding and Evolution
+* Evolvability
+	* Why compatibility?
+		* server-side rolling upgrade
+		* support different client version
+	* Compatibility is important for encoding design
+		* Backward compatibility: Newer code can read data that was written by older code
+		* Forward compatibility: Older code can read data that was written by newer code
+* Encoding: translation from the in-memory representation to a byte sequence
+	* language specific formats 
+		* Pros: handy for coding
+		* Cons
+			* hard to read by other language
+			* cause security problems
+			* versioning is not well designed
+			* low efficiency for Java
+	* JSON, XML and Binary variants
+		* Pros: standardized, human-readable
+		* Cons
+			* no distinguish between numbers and string
+			* binary strings are not support directly (Base64)
+			* schema
+				* complicated schema for XML and JSON
+				* no schema for CSV, hard coding column meaning
+	* Thrift, Protobuf and Avro
+		* Thrift and Protobuf schema definition
+		
+		~~~thrift
+		//thrift
+		struct Person {
+			1: required string       userName,
+			2: optional i64          favoriteNumber,
+			3: optional list<string> interests
+		}
+		~~~
+
+		~~~protobuf
+		//protobuf
+		message Person {
+			required string user_name       = 1;
+			optional int64  favorite_number = 2;
+			repeated string interests       = 3;
+		}
+		~~~
+		
+		* Thrift and Protobuf encoding
+			* Thrift binary encoding
+				* type annotation: string, i64...
+				* field tags (1,2,3...): alias for field names in a compact way
+			* Thrift compact encoding
+				* 1 byte: packing field tags + type annotation
+				* variable-length integers
+			* Protobuf encoding
+				* similar to Thrift compact encoding
+				* required/optional modifier: just for runtime check
+		* Thrift and Protobuf schema evolution
+			* field change
+				* field names changes are transparent due to field tag
+				* add/remove optional field is forward/backward compatible
+			* datatype change
+				* protobuf: optional (single) -> repeated (multi-value) is compatible
+		* Avro schema definition
+		
+		~~~C
+		//Avro
+		record Person {
+			string               userName;
+			union { null, long } favoriteNumber = null;
+			array<string>        interests;
+		}
+		~~~
+
+		* Avro encoding
+			* both writer schema and reader schema required when decoding
+				* writer schema can be embedded in the beginning of a large data file (Avro specifies a file format - object container files)
+			* no field tag in encoding
+			* similar to Thrift compact encoding
+		* Avro schema evolution
+			* schema resolution (writer schema -> reader schema) matches up fields by field name
+			* add or remove a field with default value is backward/forward compatible
+		* comparison of Avro and Thrift/Protobuf
+			* Dynamic typing: Avro does not require that code be generated. Data is always accompanied by a schema that permits full processing of that data without code generation, static datatypes, etc. This facilitates construction of generic data-processing systems and languages.
+			* Untagged data: 
+				* smaller serialization size.
+				* automation friendly for no manually-assigned field tags
+
+Thrift Binary Protocol             |  Thrift Compact Protocol
+:-------------------------:|:-------------------------:
+![Thrift Binary Protocol](pics/ddia/ThriftBinaryProtocol.png)  |  ![Thrift Compact Protocol](pics/ddia/ThriftCompactProtocol.png)
+
+Protobuf Protocol             |  Avro Protocol
+:-------------------------:|:-------------------------:
+![Thrift Binary Protocol](pics/ddia/ProtobufProtocol.png)  |  ![Thrift Compact Protocol](pics/ddia/AvroProtocol.png)
+
+* Dataflow: 
+	* Database
+		* backward compatibility: new reader can read old data 
+		* forward compatibility: old reader can read new data by new writer
+		* during data dump, it's better to dump schema as while as data
+	* Services: REST and RPC
+		* Web services
+			* REST: 
+				* design philosophy built upon HTTP principles
+					* Simple data format
+					* URL for resource identification
+					* HTTP features for cache control, authentication, content type negotiation
+			* SOAP:
+				* XML based
+				* independent from HTTP
+				* complex standards
+		* RPC
+			* Location transparency: remote requests like local method calls
+			* bad abstraction
+				* remote request is unpredictable for network problem
+				* retries have to be considered carefully (idempotence)
+				* hard to be language independent
+		* REST vs. RPC: REST seems to be the predominant style for public APIs. The main focus of RPC frameworks is on requests between services owned by the same organization, typically within the same datacenter 
+	* Message Passing
+		* Message passing systems: client's request (message) is delivered to message broker instead of directly to server
+			* asynchronous communication: fire and forgot
+			* reliability: 
+				* act as a buffer if the recipient is unavailable or overloaded.
+				* guaranteed message redelivery by redelivering.
+			* decouple: 
+				* sender doesn't need to know the real recipient
+				* one message can be sent to several recipients.
+		* Message brokers: message queues
+			* queue/topic, producers, consumers/subscribers
+			* compatibility depends on the message encoding format
+		* Distributed Actor framework
+			* Actor model
+				* logic encapsulated in actors, actors can have local state
+				* An actor communicates with other actors by sending and receiving asynchronous messages
+				* an actor processes 1 message at a time: no need to worry concurrency/threads
+				* each actor can be scheduled independently
 ## To Reading list
