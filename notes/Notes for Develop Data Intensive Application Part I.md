@@ -1,5 +1,5 @@
-## Questions
-1. SStable delete
+# Part I: Foundations of Data Systems
+
 ## Chapter 1: Reliability, Scalability, Maintainability
 * Reliability: fault-tolerant, resilient
 	* fault: “A fault is usually defined as one component of the system deviating from its spec”
