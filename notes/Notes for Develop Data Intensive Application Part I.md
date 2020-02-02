@@ -359,4 +359,8 @@ Protobuf Protocol             |  Avro Protocol
 				* An actor communicates with other actors by sending and receiving asynchronous messages
 				* an actor processes 1 message at a time: no need to worry concurrency/threads
 				* each actor can be scheduled independently
+
 ## To Reading list
+* TAO - Facebook’s Distributed Data Store for the Social Graph
+* The Design and Implementation of Modern Column-Oriented Database Systems
+	* column compression
