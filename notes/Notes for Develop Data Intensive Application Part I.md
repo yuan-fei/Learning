@@ -360,7 +360,9 @@ Protobuf Protocol             |  Avro Protocol
 				* an actor processes 1 message at a time: no need to worry concurrency/threads
 				* each actor can be scheduled independently
 
-## To Reading list
-* TAO - Facebook’s Distributed Data Store for the Social Graph
-* The Design and Implementation of Modern Column-Oriented Database Systems
-	* column compression
+## To-read list
+* chapter 2
+	* [TAO - Facebook’s Distributed Data Store for the Social Graph](https://www.usenix.org/system/files/conference/atc13/atc13-bronson.pdf)
+* chapter 3
+	* [The Design and Implementation of Modern Column-Oriented Database Systems](http://db.csail.mit.edu/pubs/abadi-column-stores.pdf)
+		* column compression
