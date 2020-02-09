@@ -359,7 +359,81 @@
         * A transaction reads something, makes a decision based on the value it saw, and writes the decision to the database. However, by the time the write is made, the premise of the decision is no longer true. Only serializable isolation prevents this anomaly.
     * Phantom reads
         * A transaction reads objects that match some search condition. Another client makes a write that affects the results of that search. Snapshot isolation prevents straightforward phantom reads, but phantoms in the context of write skew require special treatment, such as index-range locks.  
-
+## Chapter 8: The Trouble with Distributed Systems
+* Faults and partial failures
+    * partial failure: here may well be some parts of the system that are broken in some unpredictable way, even though other parts of the system are working fine
+    * build fault-tolerance mechanisms: we must accept the possibility of partial failure and build fault-tolerance mechanisms into the software. (build a reliable system from unreliable components)
+        * examples are checksum for error-correcting codes, reliable TCP over unreliable IP
+* Unreliable network
+    * possible causes for no response
+    ![no response](pics/ddia/no-response.png)
+    * Detecting faults: timeouts
+        * Variability of network delays is often due to queueing
+        * timeouts can be adjust according to the observed time distribution: [Phi Accrual failure detector](http://ternarysearch.blogspot.com/2013/08/phi-accrual-failure-detector.html)
+* Unreliable clocks
+    * 2 kinds of clocks
+        * Time-of-Day clocks: wall-clock time
+            * synchronization such as NTP required to be useful
+        * Monotonic clocks: always move forward. 
+            * Estimate time elapsed with difference of monotonic clock
+    * Relying on synchronized clocks
+        * clocks can go wrong but unnoticed
+        * rely on clokcs for ordering events can be dangerous: causaully happens after write, but overwritten by earlier event by LWW rule
+        ![wrong event order](pics/ddia/wrong-event-order.png)
+    * Process pauses
+        * process puases can make non-carefully-designed algorithms fail: such as lease update
+        * process pauses can be caused by 
+            * GC collection
+            * suspend and resume VM
+            * OS context switch
+            * synchronous IO
+* Knowledge, truth and lies
+    * The truth is defined by majority
+        * a node cannot necessarily trust its own judgment of a situation
+        * many distributed algorithms rely on a **majority quorum** voting
+            * allows system to continue work if several individual nodes fail
+            * there is one and only one majority in system at the same time, so conflicts can be avoided
+        * Use fencing tokens to guarantee only one of something
+            * Problem: A former leader may believe it's still the 'chosen leader' while other nodes declared it dead and promoted a new leader in the meantime
+                * fencing tokens solution
+                ![fence-token](pics/ddia/fence-token.png)
+                    * a lock server grants tokens with increasing numbers to leaders
+                    * clients ignore tokens with lower number then current highest token they have seen
+    * Byzantine faults
+        * Non-byzantine faults: 
+            * nodes are unreliable but honest: they may be slow or never respond (due to a fault), and their state may be outdated (due to a GC pause or network delays), but we assume that if a node does respond, it is telling the “truth”: to the best of its knowledge, it is playing by the rules of the protocol
+        * Byzantine faults:
+            * nodes may lie: claim to receive message when in fact they didin't
+        * Byzantine faults tolerant
+            * Avoiding client's malicious behaviors in Web applications is not considered Byzantine fault-tolerant for server can be the central authority and allow or deny the behaviors
+            * P2P network with no center of authority can be treated as Byzantine faults-tolerant relavant
+            * Byzantine faults tolerant can not save you if all nodes are compromised
+    * System models
+        * System model: abstractions and assumptions of algorithm
+            * models by timing assumptions
+                * synchronous model 
+                    * bounded network delay, bounded process pauses, and bounded clock error
+                    * not practical
+                * partially synchronous model
+                    * behaves like a synchronous system most of the time, but it sometimes exceeds the bounds for network delay, process pauses, and clock drift
+                    * realistic model for systems
+                * asynchronous model
+                    * no time assumptions, even no clock, 'timeouts' cannot be used
+                    * too restrictive
+            * models by node failures
+                * crash-stop faults: a node crashs and never comes back
+                * crash-recovery faults: 
+                    * a node can recover after crash 
+                    * a node has stable storage which preserves across crashes
+                    * a node in-memory state is assumed to be lost across crashes
+                * Byzantine faults: Nodes may do absolutely anything, including trying to trick and deceive other nodes
+        * Correctness of an algorithm
+            * correctness boilds down to properties: 'safety' and 'aliveness'
+                * safety: nothing bad happens
+                    * After a safety property has been violated, the violation cannot be undone—the damage is already done.
+                * aliveness: something good will eventually happens
+                    * it may not hold at some point in time, but there is always hope that it may be satisfied in the future
+            * We can prove algorithms correct by showing that their properties always hold in some system model
 ## To-read list
 * Chapter 5
     * [WAL internals fof PGSQL](https://www.pgcon.org/2012/schedule/attachments/258_212_Internals%20Of%20PostgreSQL%20Wal.pdf)
@@ -373,7 +447,12 @@
     * clock vector, version vector
         * [version-vectors-are-not-vector-clocks](https://haslab.wordpress.com/2011/07/08/version-vectors-are-not-vector-clocks/)
         * [vector-clocks-revisited-part-2-dotted-version-vectors](https://riak.com/posts/technical/vector-clocks-revisited-part-2-dotted-version-vectors/)
-* chapter 6
+* Chapter 6
     * parallel query processing
         * [Parallel Database Systems: The Future of High Performance Database Systems](http://www.cs.cmu.edu/~pavlo/courses/fall2013/static/papers/dewittgray92.pdf)
         * [Massively Parallel Databases and MapReduce System](https://www.microsoft.com/en-us/research/wp-content/uploads/2013/11/db-mr-survey-final.pdf)
+* Chapter 8
+    * Spanner: Google’s Globally Distributed Database
+        * [paper](https://research.google/pubs/pub39966/)
+        * [another post](http://muratbuffalo.blogspot.com/2013/07/spanner-googles-globally-distributed_4.html)
+    * [Time-Clocks-and-the-Ordering-of-Events-in-a-Distributed-System](https://www.microsoft.com/en-us/research/publication/time-clocks-ordering-events-distributed-system/?from=http%3A%2F%2Fresearch.microsoft.com%2Fen-us%2Fum%2Fpeople%2Flamport%2Fpubs%2Ftime-clocks.pdf)
