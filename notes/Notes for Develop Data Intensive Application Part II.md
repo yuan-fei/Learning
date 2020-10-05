@@ -65,7 +65,7 @@
             ![semi synchronous replication](pics/ddia/monotonic-reads.png)
                 * solution
                     * always read from the same replica for a single user (doesn't work when replica fails)
-            * Consistent prefix reads: 
+            * Consistent prefix reads: if a sequence of writes happens in a certain order, then anyone reading those writes will see them appear in the same order
             ![semi synchronous replication](pics/ddia/consistent-prefix-reads.png)
                 * problem when multi-partitions
                 * solution: causally related writes are written to same partition
@@ -114,7 +114,7 @@
     
     ![leaderless read / write / read repair](pics/ddia/leaderless-read-write.png)
     * When to use
-        * multi-datacenter operation: leaderless replication is designed to torlerate conflicting concurrent writes, network interruptions, and latency spikes
+        * multi-datacenter operation: leaderless replication is designed to tolerate conflicting concurrent writes, network interruptions, and latency spikes
             * lantency spikes: client only need to wait for the quorum to response
     * Read and Writes
         * read/write requests are sent to multiple nodes in parallel
@@ -156,7 +156,7 @@
             * B happens before A
             * A and B are concurrent
         * capturing happens before
-            * version number: for single replica
+            * <a name='version_number'></a>version number: for single replica
             ![causal](pics/ddia/causal.png)
                 * server
                     * server maintains a version number for every key, and increase on each write
@@ -167,9 +167,10 @@
                     2. merge conflict before write 
                     3. A write should indicate its base version number as well as new value (base_version_number, new_value)
             * version vectors: for multiple replica
-                * a version number per (key, replica)
+                * a [version number](#verson_number) per (key, replica)
                 * each replica keeps track of the version numbers it has seen from each of the other replicas
                 > A few variants of this idea are in use, but the most interesting is probably the dotted version vector, which is used in Riak 2.0
+                * The version vector structure ensures that it is safe to read from one replica and subsequently write back to another replica
 ## Chapter 6: Partitioning
 * Why partitioning: scalability, shared-nothing
 * Partitioning and Replication can be combined together
@@ -317,7 +318,14 @@
     * Write Skew and Phantoms
         * Write Skew: generalized lost-update problem
         ![write-skew](pics/ddia/write-skew.png)
-        * Solution: Serializable isolation
+        * Pattern causing write skew
+            1. select query to get a number of rows 
+            2. check the returned rows for condition
+            3. do write or update which might change the rows returned in 1
+        * Solution: 
+            * 'select for update' for rows return in query 1 above
+            * Materialize conflict
+            * Serializable isolation (preferrable)
 * Serializability
     * Serializable isolation: It guarantees that even though transactions may execute in parallel, the end result is the same as if they had executed one at a time, serially, without any concurrency
     * Implementations
@@ -334,13 +342,13 @@
             * index-ranged locks
                 * lock a key range in index
                 * if there is no suitable index where a range lock can be attached, the database can fall back to a shared lock on the entire table. This will not be good for performance
-        * SSI (Serializable Snapshot Isolation): snapshort isolation + serialization conflicts detection
+        * SSI (Serializable Snapshot Isolation): snapshot isolation + serialization conflicts detection
             * optimistic concurrency control
                 * Good performance when low concurrency
             * serialization conflicts detection
                 * Detecting stale MVCC reads
                 ![Detecting stale MVCC reads](pics/ddia/detecting-stale-reads.png)
-                    * When the transaction wants to **commit**, the database checks whether any of the ignored writes (according to [visibility rule of snapshor isolation](#MVCC_visibiliy)) have now been committed. If so, the transaction must be aborted
+                    * When the transaction wants to **commit**, the database checks whether any of the ignored writes (according to [visibility rule of snapsho isolation](#MVCC_visibiliy)) have now been committed. If so, the transaction must be aborted
                 * Detecting writes that affect prior reads
                 ![Detecting writes after reads](pics/ddia/detecting-writes-after-read.png)
             * Perforamance
@@ -434,6 +442,105 @@
                 * aliveness: something good will eventually happens
                     * it may not hold at some point in time, but there is always hope that it may be satisfied in the future
             * We can prove algorithms correct by showing that their properties always hold in some system model
+
+## Chapter 9: Consistency and Consensus
+* Consistency Guarantees
+    * Eventual consistency is a weak guarantee: it doesn’t say anything about when the replicas will converge
+        * there is no guarantee that you will see the value you just wrote, because the read may be routed to a different replica
+        * hard for developers
+    * Linearizability: make a system appear as if there were only one copy of the data, and all operations on it are atomic
+* Linearizability
+    * Recency guarantee: Maintaining the illusion of a single copy of the data means guaranteeing that the value read is the most recent, up-to-date value, and doesn’t come from a stale cache or replica. 
+        * In a linearizable system we imagine that there must be some point in time (between the start and end of the write operation) at which the value of x atomically flips from 0 to 1. Thus, if one client’s read returns the new value 1, all subsequent reads must also return the new value, even if the write operation has not yet completed.
+    * Total ordering: In a linearizable system, we have a total order of operations: if the system behaves as if there is only a single copy of the data, and every operation is atomic, this means that for any two operations we can always say which one happened first
+    * Linearizabilty vs. Serializability (see the book for details)
+        * Serializability: a property of transaction, reads/writes to multiple objects. Transactions behave the same as if they had executed in some serial order (each transaction running to completion before the next transaction starts)
+        * Linearizabilty: a recency guarantee on reads and writes of a register (an individual object)
+    * Relying on linearizability
+        * distributed locking and leader election
+        * uniqueness constraint
+        * cross channel timing dependencies
+    * Implementation
+        * single leader replication: potential linearizable
+        * consensus algorithms: linearizable
+        * multi-leader replication: not linearizable
+        * leaderless replication: not linearizable
+    * Cost of linearizability
+        * Limitation of CAP
+            * only consider linearizability as consistency
+            * only consider 1 kind of fault: network partitions (It doesn’t say anything about network delays, dead nodes, or other trade-offs)
+        * Performance: Many distributed databases choose not to provide linearizable guarantees: they do so primarily to increase performance, not so much for fault tolerance
+* Ordering Guarantees
+    * Ordering and Causality: 
+        * Causality imposes an partital ordering on events
+            * linearizability is total ordering, no concurrency, but more compact
+        * Capture causal dependencies by sequence number ordering
+    * Sequence number ordering
+        * logical clock, total order consistent with causuality
+        * Lamport timestamps
+        ![Lamport timestamps](pics/ddia/lamport-timestamps.png)
+            * Lamport timestamps = (counter, node ID)
+            * total ordering: compare counter, and then node ID
+            * consistent with causality: every causal dependency results in an increased timestamp
+            * difference between Lamport timestamp and version vectors
+                * version vectors is partial order
+                * lamport timestamp is total order
+        * Timestamp ordering is nor sufficient to solve problems in distributed systems
+            * in order to implement something like a uniqueness constraint for usernames, it’s not sufficient to have a total ordering of operations — you also need to know when that order is finalized (getting all nodes to agree on the ordering)
+        * Total order broadcast (atomic broadcast): 
+            * a protocol for exchanging messages between nodes with
+                * Reliable delivery - No messages are lost: if a message is delivered to one node, it is delivered to all nodes.
+                * Totally ordered delivery: Messages are delivered to every node in the same order
+            * Using total order broadcast
+                * Consensus services such as ZooKeeper and etcd actually implement total order broadcast
+                * lock serice implementation
+        * A linearizable compare-and-set (or increment-and-get) register and total order broadcast are both equivalent to consensus
+* Distributed Transactions and Consensus: Get several nodes to agree on something
+    * FLP impossible: there is no algorithm that is always able to reach consensus if there is a risk that a node may crash
+        * FLP states the impossibility under asynchronous system model that assumes a deterministic algorithm that cannot use any clocks or timeouts
+    * Atomic Commit and Two-Phase Commit (2PC)
+        * 2PC is a kind of consensus algorithm, but not a very good one (it violates the 'Termination' property in a good consensus algorithm)
+        * protocol promises
+            * once a commit decision has been made by coordinator, it has to be done by all participants
+                * the decision has to be persisted to survive a fail-restart
+                * coordinator will keep retry failed nodes until it succeeds
+        * coordinator failure
+            ![coordinator failure](pics/ddia/coordinator-failure.png)
+            * participants are in doubt or uncertain when coordinator fails, they have to wait until the coordinator recovers
+    * Fault-Tolerant Consnesus
+        * Consensus algorithm: one or more nodes may propose values, and the consensus algorithm decides on one of those values. A consensus algorithm must satisfy: (The items 1~3 provides safety guarantees, and the item 4 procides liveness guarantee)
+            1. Uniform agreement: No two nodes decide differently.
+            2. Integrity: No node decides twice.
+            3. Validity: If a node decides value v, then v was proposed by some node.
+            4. Termination: Every node that does not crash eventually decides some value.
+        * Consensus algorithms and total order broadcast
+            * Consensus algorithms decide on a sequence of values (instead of 1 value)
+            * Consensus algorithms are equavalent to total order braodcast algorithms
+            * Viewstamped Replication, Raft, and Zab implement total order broadcast directly, because that is more efficient than doing repeated rounds of one-value-at-a-time consensus
+        * Single leader replication and consensus
+            * single leader replication needs consensus algorithm for leader election
+        * Implementation: Epoch numbering and quorums
+            * consensus protocols define an epoch number (called the ballot number in Paxos, view number in Viewstamped Replication, and term number in Raft) and guarantee that within each epoch, the leader is unique
+            * A leader must collect votes of quorum of nodes
+            * After the leader is elected, the leader can decide the value in the following proposal
+        * Limitations of consensus
+            * voting in consensus algorithm is synchronous which affects performance
+            * fixed set of nodes assumption
+            * Rely on timeouts to detect failed nodes
+            * consensus algorithms are particularly sensitive to network problems
+    * Membership and Coordination service
+        * ZooKeeper and etcd are designed to hold small amounts of data that can fit entirely in memory (although they still write to disk for durability)
+        * Zookeeper implements a set of services
+            * distributed lock: by linearizable atomic operations
+            * monotonically increasing transaction ID: by total ordering operations
+            * failure detecion: client session + ephemeral nodes
+            * change notifications
+        * What can we build from zookeeper
+            * leader election
+            * service discovery
+            * membership
+* Do all systems need consensus
+> Nevertheless, not every system necessarily requires consensus: for example, leaderless and multi-leader replication systems typically do not use global consensus. The conflicts that occur in these systems (see “Handling Write Conflicts”) are a consequence of not having consensus across different leaders, but maybe that’s okay: maybe we simply need to cope without linearizability and learn to work better with data that has branching and merging version histories
 ## To-read list
 * Chapter 5
     * [WAL internals fof PGSQL](https://www.pgcon.org/2012/schedule/attachments/258_212_Internals%20Of%20PostgreSQL%20Wal.pdf)
@@ -456,3 +563,12 @@
         * [paper](https://research.google/pubs/pub39966/)
         * [another post](http://muratbuffalo.blogspot.com/2013/07/spanner-googles-globally-distributed_4.html)
     * [Time-Clocks-and-the-Ordering-of-Events-in-a-Distributed-System](https://www.microsoft.com/en-us/research/publication/time-clocks-ordering-events-distributed-system/?from=http%3A%2F%2Fresearch.microsoft.com%2Fen-us%2Fum%2Fpeople%2Flamport%2Fpubs%2Ftime-clocks.pdf)
+* Chapter 9
+    * CAP: 
+        * [Please Stop Calling Databases CP or AP](http://martin.kleppmann.com/2015/05/11/please-stop-calling-databases-cp-or-ap.html)
+        * [Replicated Data Consistency Explained Through Baseball](https://www.microsoft.com/en-us/research/wp-content/uploads/2011/10/ConsistencyAndBaseballReport.pdf)
+    * Concensus
+        * [The Chubby Lock Service for Loosely-Coupled Distributed Systems](https://research.google/pubs/pub27897/)
+        * [ZAB](http://www.cs.cornell.edu/courses/cs6452/2012sp/papers/zab-ieee.pdf)
+        * [Paxos Made Simple](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/paxos-simple-Copy.pdf)
+        * [Raft Refloated: Do We Have Consensus?](https://www.cl.cam.ac.uk/~ms705/pub/papers/2015-osr-raft.pdf)
